@@ -7,7 +7,7 @@ import {fileURLToPath} from 'node:url';
 import {createInterface} from 'node:readline';
 import {atomic, applyProxy, restoreProxy} from './settings.js';
 import {validate, refresh} from './config.js';
-const pkg = path.dirname(fileURLToPath(import.meta.url));
+const pkg = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const root = process.env.PRIVATE_BRIDGE_ROOT || path.join(os.homedir(), '.config/magpie-cursor-private');
 const settings = process.env.PRIVATE_BRIDGE_SETTINGS || path.join(os.homedir(), 'Library/Application Support/Cursor/User/settings.json');
 const file = n => path.join(root,n);

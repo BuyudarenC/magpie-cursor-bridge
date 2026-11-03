@@ -9,12 +9,14 @@
     "url": "https://github.com/BuyudarenC/magpie-cursor-bridge.git"
   },
   "magpie": {
-    "agent": "./agent.js"
+    "agent": "./src/agent.js"
   },
   "scripts": {
-    "test": "node --test security.test.js",
-    "privacy": "node privacy-check.mjs",
-    "build:native": "bash build.sh"
+    "test": "node --test tests/*.test.js",
+    "privacy": "node scripts/privacy-check.mjs",
+    "build:native": "bash scripts/build.sh",
+    "setup": "bash scripts/setup.sh",
+    "status": "node scripts/manage.js status"
   },
   "dependencies": {
     "jsonc-parser": "3.3.1"
@@ -29,18 +31,13 @@
     "arm64"
   ],
   "files": [
-    "agent.js",
-    "service.js",
-    "manage.js",
-    "settings.js",
-    "config.js",
-    "build.sh",
-    "setup.sh",
-    "native.patch",
+    "src",
+    "scripts",
+    "native",
+    "licenses",
     "README.md",
     "SECURITY.md",
     "LICENSE",
-    "reference-LICENSE",
     "THIRD_PARTY_NOTICES.md",
     "bin/cursor-private-engine",
     "integrity.json"

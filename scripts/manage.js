@@ -2,10 +2,10 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import {execFileSync,spawnSync} from 'node:child_process';
+import {spawnSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
-import {atomic,restoreProxy} from './settings.js';
-const pkg=path.dirname(fileURLToPath(import.meta.url));
+import {atomic,restoreProxy} from '../src/settings.js';
+const pkg=path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const root=path.join(os.homedir(),'.config/magpie-cursor-private');
 const plist=path.join(os.homedir(),'Library/LaunchAgents/local.magpie.cursor-private.plist');
 const label='local.magpie.cursor-private', domain=`gui/${process.getuid()}`;
@@ -17,7 +17,7 @@ if(command==='status') {
 } else if(command==='install') {
   fs.mkdirSync(root,{recursive:true,mode:0o700});fs.chmodSync(root,0o700);
   const esc=s=>s.replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;');
-  const args=[process.execPath,path.join(pkg,'service.js')].map(s=>`<string>${esc(s)}</string>`).join('');
+  const args=[process.execPath,path.join(pkg,'src/service.js')].map(s=>`<string>${esc(s)}</string>`).join('');
   ctl('bootout',`${domain}/${label}`);
   atomic(plist,`<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd"><plist version="1.0"><dict><key>Label</key><string>${label}</string><key>ProgramArguments</key><array>${args}</array><key>RunAtLoad</key><true/><key>KeepAlive</key><true/><key>ThrottleInterval</key><integer>10</integer><key>ExitTimeOut</key><integer>15</integer><key>Umask</key><integer>63</integer><key>StandardOutPath</key><string>/dev/null</string><key>StandardErrorPath</key><string>/dev/null</string></dict></plist>`);
   const result=ctl('bootstrap',domain,plist);
@@ -31,4 +31,4 @@ if(command==='status') {
   restoreProxy(path.join(root,'settings-journal.json'));
   fs.rmSync(plist,{force:true});
   console.log('后台已停用，代理已恢复。插件可用 magpie plugin rm 移除；源文件和本机证书保留。');
-} else {throw Error('用法: node manage.js install|status|uninstall');}
+} else {throw Error('用法: node scripts/manage.js install|status|uninstall');}

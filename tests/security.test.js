@@ -4,8 +4,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import http from 'node:http';
-import {validate,refresh} from './config.js';
-import {applyProxy,restoreProxy} from './settings.js';
+import {validate,refresh} from '../src/config.js';
+import {applyProxy,restoreProxy} from '../src/settings.js';
 const config=()=>({enabled:true,gateway:'http://127.0.0.1:3425/v1',key:'x'.repeat(32),model:'p/a',models:[{id:'p/a'}]});
 test('remote gateways, injected credentials, URL suffixes and duplicate models rejected',()=>{
   for(const gateway of ['https://127.0.0.1:3425/v1','http://localhost:3425/v1','http://evil.example/v1','http://127.0.0.1:3425/v1?q=x','http://user:pass@127.0.0.1:3425/v1']) assert.throws(()=>validate({...config(),gateway}));
