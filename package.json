@@ -1,6 +1,6 @@
 {
   "name": "magpie-cursor-private",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "type": "module",
   "description": "A local Magpie agent bridge for Cursor with authenticated loopback endpoints and in-memory sessions",
   "license": "MIT",

@@ -14,5 +14,5 @@ CARGO_BUILD_JOBS="${CARGO_BUILD_JOBS:-4}" cargo build --manifest-path "$bridge_s
 mkdir -p bin
 cp .build/target/release/cursor-magpie-bridge bin/cursor-private-engine
 chmod 755 bin/cursor-private-engine
-node --input-type=module -e 'import fs from "node:fs"; import {createHash} from "node:crypto"; const sha256=createHash("sha256").update(fs.readFileSync("bin/cursor-private-engine")).digest("hex"); fs.writeFileSync("integrity.json",JSON.stringify({version:"1.0.0",sha256},null,2)+"\n");'
+node --input-type=module -e 'import fs from "node:fs"; import {createHash} from "node:crypto"; const sha256=createHash("sha256").update(fs.readFileSync("bin/cursor-private-engine")).digest("hex"); fs.writeFileSync("integrity.json",JSON.stringify({version:"1.0.1",sha256},null,2)+"\n");'
 echo 'Native engine built locally; integrity.json updated.'

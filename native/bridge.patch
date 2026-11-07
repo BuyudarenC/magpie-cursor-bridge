@@ -69,10 +69,10 @@ index 0000000..30bf762
 +}
 diff --git a/server/src/bin/cursor-magpie-bridge.rs b/server/src/bin/cursor-magpie-bridge.rs
 new file mode 100644
-index 0000000..a83966f
+index 0000000..4e3af7c
 --- /dev/null
 +++ b/server/src/bin/cursor-magpie-bridge.rs
-@@ -0,0 +1,159 @@
+@@ -0,0 +1,179 @@
 +//! Headless Cursor protocol bridge. No desktop/account writes or management API.
 +use std::{path::PathBuf, sync::Arc, time::Duration};
 +use cursor_server::{api, config, cursor::{prompting::{PromptAssets, PromptCompiler}, transport::TransportRegistry}, local_app::CursorHarness, model::ModelConfigInput, network::NetworkClients, plugin::{PluginRegistry, PluginRuntime}, provider::ProviderRouter, search::WebCache, store::Store};
@@ -102,7 +102,7 @@ index 0000000..a83966f
 +            "group_name":"Magpie", "type":"openai", "base_url": c.gateway.trim_end_matches('/'),
 +            "api_key":c.key, "tooltip_data":format!("Magpie / {}",m.id), "model_id":m.id,
 +            "context_window_tokens":m.context.filter(|v| *v > 0),
-+            "custom_headers_enabled":true, "custom_headers":{"User-Agent":"cursor-private-bridge/1.0.0"}
++            "custom_headers_enabled":true, "custom_headers":{"User-Agent":"cursor-private-bridge/1.0.1"}
 +        }))?)
 +    }).collect()
 +}
@@ -111,11 +111,11 @@ index 0000000..a83966f
 +async fn main() -> Result<(), Box<dyn std::error::Error>> {
 +    let argument = std::env::args().nth(1);
 +    if argument.as_deref() == Some("--version") {
-+        println!("1.0.0");
++        println!("1.0.1");
 +        return Ok(());
 +    }
 +    if argument.as_deref() == Some("--help") || argument.is_none() {
-+        println!("cursor-magpie-bridge 1.0.0\nUsage: cursor-magpie-bridge --init-ca | CONNECTION.json\nRequires CURSOR_BYOK_DATA_DIR (absolute path). --init-ca never modifies certificate trust.");
++        println!("cursor-magpie-bridge 1.0.1\nUsage: cursor-magpie-bridge --init-ca | CONNECTION.json\nRequires CURSOR_BYOK_DATA_DIR (absolute path). --init-ca never modifies certificate trust.");
 +        return Ok(());
 +    }
 +    // A dedicated directory is mandatory: never open the desktop BYOK database.
@@ -177,6 +177,9 @@ index 0000000..a83966f
 +            _ = parent_closed.cancelled() => break,
 +            _ = interval.tick() => {
 +                if server.is_finished() { break; }
++                // Never advertise a live bridge after its store becomes unusable.
++                // Exiting lets the supervisor replace the broken process.
++                if store.models().await.is_err() { break; }
 +                match tokio::fs::read(&path).await {
 +                    Ok(next) if next != contents => match catalogue(&next) {
 +                        Ok(inputs) => {
@@ -215,6 +218,23 @@ index 0000000..a83966f
 +    fn rejects_remote_and_duplicate_models() {
 +        let mut c=config();c["gateway"]=json!("http://evil.example/v1");assert!(catalogue(&serde_json::to_vec(&c).unwrap()).is_err());
 +        let mut c=config();c["models"]=json!([{"id":"p/b"},{"id":"p/b"}]);assert!(catalogue(&serde_json::to_vec(&c).unwrap()).is_err());
++    }
++    #[tokio::test]
++    async fn memory_store_keeps_its_schema_and_catalogue() {
++        let store = Store::connect("sqlite::memory:").await.unwrap();
++        let options = store.pool().options();
++        assert_eq!(options.get_min_connections(), 1);
++        assert_eq!(options.get_max_connections(), 1);
++        assert_eq!(options.get_idle_timeout(), None);
++        assert_eq!(options.get_max_lifetime(), None);
++        let inputs = catalogue(&serde_json::to_vec(&config()).unwrap()).unwrap();
++        store.replace_bridge_models(&inputs).await.unwrap();
++        for _ in 0..5 {
++            let connection = store.pool().acquire().await.unwrap();
++            drop(connection);
++            tokio::task::yield_now().await;
++            assert_eq!(store.models().await.unwrap().len(), 2);
++        }
 +    }
 +    #[tokio::test]
 +    async fn catalogue_update_is_atomic_and_retains_last_valid_models() {
@@ -732,15 +752,29 @@ index 6d29d3c..f47ac3e 100644
          let query =
              format!("SELECT {MODEL_COLUMNS} FROM model_configs ORDER BY sort_order, display_name");
 diff --git a/server/src/store/sqlite.rs b/server/src/store/sqlite.rs
-index 1403cf8..bbb9d12 100644
+index 1403cf8..3291770 100644
 --- a/server/src/store/sqlite.rs
 +++ b/server/src/store/sqlite.rs
-@@ -26,7 +26,7 @@ impl Store {
+@@ -25,10 +25,18 @@ impl Store {
+             .synchronous(SqliteSynchronous::Full)
              .busy_timeout(Duration::from_secs(5));
          let database_path = options.get_filename().to_owned();
-         let pool = SqlitePoolOptions::new()
+-        let pool = SqlitePoolOptions::new()
 -            .max_connections(8)
-+            .max_connections(if database_url == "sqlite::memory:" { 1 } else { 8 })
-             .connect_with(options)
-             .await?;
+-            .connect_with(options)
+-            .await?;
++        let pool_options = if database_url == "sqlite::memory:" {
++            // The last SQLite memory connection owns the database. Recycling it
++            // loses the schema even while the bridge process remains alive.
++            SqlitePoolOptions::new()
++                .max_connections(1)
++                .min_connections(1)
++                .idle_timeout(None)
++                .max_lifetime(None)
++        } else {
++            SqlitePoolOptions::new().max_connections(8)
++        };
++        let pool = pool_options.connect_with(options).await?;
          migrations::run(&pool, &database_path).await?;
+         Ok(Self {
+             pool,

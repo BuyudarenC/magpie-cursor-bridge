@@ -15,7 +15,7 @@ export function validate(c) {
 }
 export async function refresh(c) {
   const response = await fetch(c.gateway + '/models', {
-    headers:{Authorization:`Bearer ${c.key}`, 'User-Agent':'cursor-private-bridge/1.0.0'},
+    headers:{Authorization:`Bearer ${c.key}`, 'User-Agent':'cursor-private-bridge/1.0.1'},
     redirect:'error', signal:AbortSignal.timeout(5000)
   });
   if (!response.ok) throw Error(`Magpie 网关状态 ${response.status}`);
