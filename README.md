@@ -110,7 +110,7 @@ Cursor 代理设置可能被手动修改或由其他工具接管。排除冲突�
 
 **更新 Cursor 后无法使用**
 
-Cursor 协议变更可能影响兼容性。目前已验证 3.27 系列的模型目录和文本请求链路，其他功能以实际使用结果为准。
+Cursor 协议变更可能影响兼容性。3.27 系列用 hex 字符串 `data` 传 BidiAppend 消息；从 3.29 起改为原始字节 `data_binary`，旧版协议核心会在解析阶段直接拒绝，表现为发消息后一直停在 "Taking longer than expected..."，且 Magpie 里看不到任何调用记录。1.0.1 起两种格式都支持，可查看 `Cursor Agent Host Network (debug).log` 中的 `bidiAppend failed` 报错来确认。已验证 3.27 系列和 3.29.9 的模型目录与文本请求链路，其他功能以实际使用结果为准。
 
 ## 许可证
 

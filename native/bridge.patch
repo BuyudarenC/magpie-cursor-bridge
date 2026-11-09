@@ -15,17 +15,23 @@ index ca35974..9aeedbf 100644
    optional bytes summary_archive = 11;
 diff --git a/server/examples/magpie_smoke.rs b/server/examples/magpie_smoke.rs
 new file mode 100644
-index 0000000..30bf762
+index 0000000..f727c8c
 --- /dev/null
 +++ b/server/examples/magpie_smoke.rs
-@@ -0,0 +1,48 @@
+@@ -0,0 +1,54 @@
 +//! Explicit live smoke test: args are proxy URL and catalogue model hash.
 +use cursor_server::cursor::protocol::{connect,proto::{agent::v1 as pb,aiserver::v1 as ai}};
 +use prost::Message;
 +use futures_util::StreamExt;
 +use std::time::Duration;
 +async fn append(client:&reqwest::Client,id:&str,seq:i64,message:pb::AgentClientMessage) -> Result<(),Box<dyn std::error::Error>> {
-+ let body=ai::BidiAppendRequest{data:hex::encode(message.encode_to_vec()),request_id:Some(ai::BidiRequestId{request_id:id.into()}),append_seqno:seq,..Default::default()};
++ // Cursor 3.29+ uses data_binary; set PRIVATE_BRIDGE_SMOKE_HEX=1 to exercise the legacy hex path.
++ let payload=message.encode_to_vec();
++ let legacy=std::env::var_os("PRIVATE_BRIDGE_SMOKE_HEX").is_some();
++ let body=ai::BidiAppendRequest{
++  data:if legacy {hex::encode(&payload)} else {String::new()},
++  data_binary:if legacy {Vec::new()} else {payload},
++  request_id:Some(ai::BidiRequestId{request_id:id.into()}),append_seqno:seq,..Default::default()};
 + let r=client.post("https://api2.cursor.sh/aiserver.v1.BidiService/BidiAppend").header("Content-Type","application/proto").body(body.encode_to_vec()).send().await?;
 + if !r.status().is_success(){return Err(format!("append {}: {}",r.status(),r.text().await?).into());} Ok(())
 +}
@@ -67,6 +73,46 @@ index 0000000..30bf762
 + }
 + Err("stream closed before successful end".into())
 +}
+diff --git a/server/src/api/cursor/bidi.rs b/server/src/api/cursor/bidi.rs
+index f069981..cff5528 100644
+--- a/server/src/api/cursor/bidi.rs
++++ b/server/src/api/cursor/bidi.rs
+@@ -160,22 +160,25 @@ pub fn decode(request: &ai::BidiAppendRequest) -> Result<DecodedAppend> {
+         .map(|id| id.request_id.as_str())
+         .filter(|id| !id.is_empty())
+         .ok_or_else(|| Error::Protocol("BidiAppend request_id is required".into()))?;
+-    if !request.data_binary.is_empty() {
+-        return Err(Error::Protocol(
+-            "BidiAppend data_binary is not part of the captured protocol".into(),
+-        ));
+-    }
+-    if request.data.is_empty() {
++    // Cursor 3.29+ sends the AgentClientMessage as raw protobuf bytes in
++    // data_binary (tag 4). Older builds hex-encode the same bytes in data
++    // (tag 1). Accept both so a client upgrade does not strand the stream
++    // before it ever reaches the Magpie gateway.
++    let message = if !request.data_binary.is_empty() {
++        agent::AgentClientMessage::decode(request.data_binary.as_slice())?
++    } else if !request.data.is_empty() {
++        let payload = hex::decode(&request.data)
++            .map_err(|error| Error::Protocol(format!("invalid BidiAppend hex: {error}")))?;
++        agent::AgentClientMessage::decode(payload.as_slice())?
++    } else {
+         return Err(Error::Protocol(
+             "BidiAppend contains no AgentClientMessage".into(),
+         ));
+-    }
+-    let payload = hex::decode(&request.data)
+-        .map_err(|error| Error::Protocol(format!("invalid BidiAppend hex: {error}")))?;
++    };
+     Ok(DecodedAppend {
+         request_id: request_id.into(),
+         seqno: request.append_seqno,
+-        message: agent::AgentClientMessage::decode(payload.as_slice())?,
++        message,
+     })
+ }
+ 
 diff --git a/server/src/bin/cursor-magpie-bridge.rs b/server/src/bin/cursor-magpie-bridge.rs
 new file mode 100644
 index 0000000..4e3af7c
